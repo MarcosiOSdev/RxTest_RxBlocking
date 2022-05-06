@@ -145,4 +145,20 @@ class TestingOperators : XCTestCase {
         wait(for: [expec], timeout: 3)
         XCTAssertEqual(resultOnAsync, "Hello World")
     }
+    
+    func testTextViewWithSchedule() {
+        let textView = UITextView()
+        let observable = textView.rx.text.orEmpty.share()
+        let observer = scheduler.createObserver(String.self)
+        scheduler.scheduleAt(0) {
+            self.subscription = observable.subscribe(observer)
+        }
+        
+        textView.text = "Hello World"
+        scheduler.start()
+        let results = observer.events.map {
+            $0.value.element!
+        }
+        XCTAssertEqual(results, ["Hello World"])
+    }
 }
