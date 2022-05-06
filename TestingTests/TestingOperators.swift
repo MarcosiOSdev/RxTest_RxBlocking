@@ -24,11 +24,13 @@ import XCTest
 import RxSwift
 import RxTest
 import RxBlocking
+@testable import Testing
 
 class TestingOperators : XCTestCase {
     
     var scheduler: TestScheduler!
     var subscription: Disposable!
+    var disposable = DisposeBag()
     
     override func setUp() {
         super.setUp()
@@ -97,5 +99,50 @@ class TestingOperators : XCTestCase {
         let toArrayObservable = Observable.of("1)", "2)").subscribeOn(scheduler)
         
         XCTAssertEqual(try! toArrayObservable.toBlocking().toArray(), ["1)", "2)"])
+    }
+    
+    func testWithViewController() {
+        let storyboard = UIStoryboard(name: "Main", bundle: nil)
+            // Step 2. Instantiate UIViewController with Storyboard ID
+        let sut = storyboard.instantiateViewController(withIdentifier: "ViewController") as! ViewController
+            
+        // Step 3. Make the viewDidLoad() execute.
+        _ = sut.view
+        
+        let observable = sut.hexTextField.rx.text.orEmpty.share()
+        
+        observable
+            .subscribe({ event in
+            print(event.element)
+            
+        }).disposed(by: disposable)
+        
+        
+        sut.hexTextField.text = "Test"
+        sut.hexTextField.sendActions(for: .valueChanged)
+        
+        
+        
+    }
+    
+    func testTextView() {
+        let textView = UITextView()
+        let observable = textView.rx.text.orEmpty.share()
+        let expec = expectation(description: "Hello Expec")
+        var resultOnAsync = ""
+        observable
+            .asObservable()
+            .filter{ $0 != nil } //primeiro vem nil
+            .skip(1) //logo apos vem um com vazio
+            .subscribe(onNext: { event in
+                print("OBS2: \(event)")
+                resultOnAsync = event
+                expec.fulfill()
+            })
+            .disposed(by: self.disposable)
+        
+        textView.text = "Hello World"
+        wait(for: [expec], timeout: 3)
+        XCTAssertEqual(resultOnAsync, "Hello World")
     }
 }
