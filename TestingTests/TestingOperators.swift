@@ -1,25 +1,3 @@
-/*
- * Copyright (c) 2014-2017 Razeware LLC
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
-
 import XCTest
 import RxSwift
 import RxTest
@@ -103,10 +81,7 @@ class TestingOperators : XCTestCase {
     
     func testWithViewController() {
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
-            // Step 2. Instantiate UIViewController with Storyboard ID
         let sut = storyboard.instantiateViewController(withIdentifier: "ViewController") as! ViewController
-            
-        // Step 3. Make the viewDidLoad() execute.
         _ = sut.view
         
         let observable = sut.hexTextField.rx.text.orEmpty.share()
@@ -120,10 +95,23 @@ class TestingOperators : XCTestCase {
         
         sut.hexTextField.text = "Test"
         sut.hexTextField.sendActions(for: .valueChanged)
-        
-        
-        
     }
+    
+    func testWithViewControllerWithSchedule() {
+        let storyboard = UIStoryboard(name: "Main", bundle: nil)
+        let sut = storyboard.instantiateViewController(withIdentifier: "ViewController") as! ViewController
+        _ = sut.view
+        
+        let scheduler = ConcurrentDispatchQueueScheduler(qos: .default)
+        let observable = sut.hexTextField.rx.text.orEmpty.share().subscribeOn(scheduler)
+        
+        sut.hexTextField.text = "Hello World"
+        sut.hexTextField.sendActions(for: .valueChanged)
+        
+        let result = try! observable.toBlocking(timeout: 1).first()!
+        XCTAssertEqual(result, "Hello World")
+    }
+    
     
     func testTextView() {
         let textView = UITextView()
@@ -151,7 +139,7 @@ class TestingOperators : XCTestCase {
         let observable = textView.rx.text.orEmpty.share()
         let observer = scheduler.createObserver(String.self)
         scheduler.scheduleAt(0) {
-            self.subscription = observable.subscribe(observer)
+            observable.subscribe(observer).disposed(by: self.disposable)
         }
         
         textView.text = "Hello World"
@@ -160,5 +148,38 @@ class TestingOperators : XCTestCase {
             $0.value.element!
         }
         XCTAssertEqual(results, ["Hello World"])
+    }
+    
+    func testTextViewWithScheludeDispatch() {
+        let textView = UITextView()
+        let scheduler = ConcurrentDispatchQueueScheduler(qos: .default)
+        let observable = textView.rx.text.orEmpty.share().subscribeOn(scheduler)
+        
+        textView.text = "Hello World"
+        
+        let result = try! observable.toBlocking(timeout: 1).first()!
+        XCTAssertEqual(result, "Hello World")
+    }
+    
+    func testScheduleInAction() {
+        let scheduler = TestScheduler(initialClock: 0)
+            let bag = DisposeBag()
+            
+            let observable = scheduler.createHotObservable([
+                .next(1, "apple"),
+                .next(2, "orange"),
+                .next(3, "banana")
+            ])
+            
+            let observer = scheduler.createObserver(String.self)
+            observable.subscribe(observer).disposed(by: bag)
+            
+            scheduler.start()
+            
+            XCTAssertEqual(observer.events, [
+                .next(1, "apple"),
+                .next(2, "orange"),
+                .next(3, "banana")
+            ])
     }
 }
